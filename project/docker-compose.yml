@@ -1,0 +1,149 @@
+version: '3.4'
+
+x-global-variables: &global-variables
+  BROKER_SERVICE_PORT: 8081
+  AUTH_SERVICE_PORT: 8082
+  LOGGER_SERVICE_PORT: 8083
+  POSTGRES_SERVICE_PORT: 5001
+  MAIL_SERVICE_PORT: 8084
+  BASE_URL: 172.17.0.1
+  RPC_PORT: 5002
+
+  MONGO_INITDB_DATABASE: logs
+  MONGO_INITDB_ROOT_USERNAME: admin
+  MONGO_INITDB_ROOT_PASSWORD: password
+
+services:
+
+  rabbitmq-service:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq-service
+    ports:
+      - 5672:5672   # for sender and consumer connections
+      - 15672:15672 # for serve RabbitMQ GUI
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      <<: *global-variables
+    volumes:
+      - ./db-data/rabbitmq/data/:/rabbitmq/data
+      - ./db-data/rabbitmq/log/:/rabbitmq/log
+    restart: always
+  postgres:
+    image: postgres
+    container_name: postgres-service
+    ports:
+      - "5001:5432"
+    deploy:
+      mode: replicated
+      replicas: 1
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: users
+    volumes:
+      - ./db-data/postgres/:/var/lib/postgresql/data/
+
+  mongo-service:
+    container_name: mongo-service
+    image: mongo:4.2.16-bionic
+    ports:
+      - "27017:27017"
+    environment:
+      <<: *global-variables
+    volumes:
+      - ./db-data/mongo/:/data/db
+
+  mailhog:
+    image: 'mailhog/mailhog'
+    container_name: mailhog_service
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  broker-service:
+      build:
+        context: ./../broker-service
+        dockerfile: broker-service.dockerfile
+      restart: always
+      container_name: broker_service
+      ports:
+        - "8081:80"
+      deploy:
+        mode: replicated
+        replicas: 1
+      environment:
+        <<: *global-variables
+
+  authentication-service:
+    build:
+      context: ./../authentication-service
+      dockerfile: authentication-service.dockerfile
+    restart: always
+    container_name: authentication_service
+    ports:
+      - "8082:80"
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      <<: *global-variables
+      DSN: "host=172.17.0.1 port=5001 user=postgres password=password dbname=users sslmode=disable timezone=UTC connect_timeout=5"
+
+  logger-service:
+    build:
+      context: ./../logger-service
+      dockerfile: logger-service.dockerfile
+    restart: always
+    container_name: logger_service
+    ports:
+      - "8083:80"
+      - "5002:5002"
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      <<: *global-variables
+      MONGO_URL: "mongodb://172.17.0.1:27017"
+
+  mail-service:
+    build:
+      context: ./../mail-service
+      dockerfile: mail-service.dockerfile
+    restart: always
+    container_name: mail_service
+    ports:
+      - "8084:80"
+    deploy:
+      mode: replicated
+      replicas: 1
+#    volumes:
+#      - ./
+    environment:
+      <<: *global-variables
+      MAIL_DOMAIN: "172.17.0.1"
+      MAIL_HOST: "mailhog"
+      MAIL_PORT: 1025
+      MAIL_USERNAME: none
+      MAIL_PASSWORD: ""
+      MAIL_ENCRYPTION: ""
+      MAIL_FROM_NAME: "MochJuang"
+      MAIL_FROM_ADDRESS: "moch.juang@example.com"
+
+  listener-service:
+    build:
+      context: ./../listener-service
+      dockerfile: listener-service.dockerfile
+    restart: always
+    container_name: listener_service
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      <<: *global-variables
+
+networks:
+  microservice-example-network:
+    driver: bridge

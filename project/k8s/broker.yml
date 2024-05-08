@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broker-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: broker-service
+  template:
+    metadata:
+      labels:
+        app: broker-service
+    spec:
+      containers:
+        -   name: broker-service
+            image: "mochjuang/project-broker-service"
+            env:
+              - name: BASE_URL
+                value: http://10.99.192.145:5672
+            resources:
+              requests:
+                memory: "64Mi"
+                cpu: "250m"
+              limits:
+                memory: "128Mi"
+                cpu: "500m"
+            ports:
+              -   containerPort: 8081
+
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: broker-service
+spec:
+  selector:
+    app: broker-service
+  ports:
+    -   port: 8081
+        targetPort: 8081
